@@ -2,7 +2,14 @@
 
 A WebSocket implementation for PHP. Supports [RFC6455](https://tools.ietf.org/html/rfc6455).
 
-###A quick example
+### Installation
+
+Using Composer:
+
+```sh
+composer require lexty/websocketserver
+```
+### A quick example
 
 ```php
 <?php
