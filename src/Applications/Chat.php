@@ -33,9 +33,7 @@ class Chat extends AbstractApplication {
         $message = 'пользователь #' . $from->getId() . ' (' . $worker->getPid() . '): ' . strip_tags($msg->getMessage());
 
         foreach ($this->clients as $client) {
-            if ($client !== $from) {
-                $client->send($message);
-            }
+            $client->send($message);
         }
     }
 
