@@ -11,6 +11,11 @@
             "email": "alexandr.mdr@gmail.com"
         }
     ],
+    "support": {
+        "issues": "https://github.com/Lexty/web-socket-server/issues",
+        "wiki": "https://github.com/Lexty/web-socket-server/wiki",
+        "source": "https://github.com/Lexty/web-socket-server"
+    },
     "minimum-stability": "dev",
     "require": {
         "php": ">=5.4",
