@@ -1,0 +1,25 @@
+{
+    "name": "lexty/websocketserver",
+    "description": "A WebSocket implementation for PHP 5.4",
+    "homepage": "https://github.com/Lexty/WebSocketServer",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["web socket"],
+    "authors": [
+        {
+            "name": "Medvedev Alexandr",
+            "email": "alexandr.mdr@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+        "php": ">=5.3",
+        "ext-pcntl": "*",
+        "ext-sockets": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Lexty\\WebSocketServer\\": "src/"
+        }
+    }
+}
