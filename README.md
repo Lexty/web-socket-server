@@ -71,7 +71,7 @@ conn.onmessage = function(e) { console.log(e.data); };
 conn.send('Hello Me!');
 ```
 
-Else you can pass parameters to server on client when commecting
+You can pass additional parameters in the server connection. For example, for authorization.
  
  
 ```javascript
