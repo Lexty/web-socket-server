@@ -7,8 +7,10 @@ namespace Lexty\WebSocketServer;
 
 use Lexty\WebSocketServer\Exceptions\UndefinedPropertyException;
 
-trait ReadonlyPropertiesAccessTrait {
-    public function __get($name) {
+trait ReadonlyPropertiesAccessTrait
+{
+    public function __get($name)
+    {
         $getter = 'get' . $name;
         if (method_exists($this, $getter)) {
             return $this->$getter();

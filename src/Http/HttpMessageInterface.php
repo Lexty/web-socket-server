@@ -5,7 +5,8 @@
 
 namespace Lexty\WebSocketServer\Http;
 
-interface HttpMessageInterface {
+interface HttpMessageInterface
+{
     /**
      * @return string
      */

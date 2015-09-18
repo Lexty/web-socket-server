@@ -6,35 +6,38 @@
 namespace Lexty\WebSocketServer;
 
 
-class Master {
-    protected $workers = [];
-    protected $clients = [];
+class Master
+{
+    protected $handlers = [];
+    protected $clients  = [];
 
-    public function __construct($workers) {
-        $this->clients = $this->workers = $workers;
+    public function __construct($handlers)
+    {
+        $this->clients = $this->handlers = $handlers;
     }
 
-    public function run() {
+    public function run()
+    {
         while (true) {
-            //подготавливаем массив всех сокетов, которые нужно обработать
+            // preparing an array of sockets that need to be processed
             $read = $this->clients;
 
-            stream_select($read, $write, $except, null);//обновляем массив сокетов, которые можно обработать
+            stream_select($read, $write, $except, null); // update an array of sockets that can be processed
 
-            if ($read) {//пришли данные от подключенных клиентов
+            if ($read) { // data came from the connected clients
                 foreach ($read as $client) {
                     if (!is_resource($client)) exit();
                     $data = fread($client, 1000);
 
-                    if (!strlen($data)) { //соединение было закрыто
+                    if (!strlen($data)) { // connection has been closed
                         unset($this->clients[intval($client)]);
                         @fclose($client);
                         continue;
                     }
 
-                    foreach ($this->workers as $worker) {//пересылаем данные во все воркеры
-                        if ($worker !== $client) {
-                            fwrite($worker, $data);
+                    foreach ($this->handlers as $handler) { // forwards the data to all worker`s
+                        if ($handler !== $client) {
+                            fwrite($handler, $data);
                         }
                     }
                 }

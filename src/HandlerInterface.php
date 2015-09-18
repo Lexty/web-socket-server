@@ -6,7 +6,14 @@
 namespace Lexty\WebSocketServer;
 
 
-interface WorkerInterface {
+/**
+ * Interface HandlerInterface
+ *
+ * @property int $pid
+ * @property int $connectionsCount
+ */
+interface HandlerInterface
+{
     /**
      * @return int
      */

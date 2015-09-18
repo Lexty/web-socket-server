@@ -14,19 +14,24 @@ use Lexty\WebSocketServer\ReadonlyPropertiesAccessTrait;
  * @property-read HeadersCollectionInterface $headers
  * @property-read string                     $body
  */
-class Request implements RequestInterface {
+class Request implements RequestInterface
+{
     use ReadonlyPropertiesAccessTrait;
 
     /** @var string Request method. */
-    private $method;
-    /** @var string Request path. */
-    private $path;
+    private $method = '';
     /** @var string Request protocol. */
-    private $protocol;
+    private $protocol = '';
     /** @var HeadersCollectionInterface A container for HTTP headers. */
     private $headers;
     /** @var string Request body. */
-    private $body;
+    private $body = '';
+    /** @var string */
+    private $url = '';
+    /** @var array */
+    private $parsedUrl = [];
+    /** @var Query */
+    private $query;
 
     /**
      * Create instance of Request class by request raw string.
@@ -36,7 +41,8 @@ class Request implements RequestInterface {
      * @return Request
      * @throws InvalidRequestException
      */
-    public static function createFromRawData($rawData) {
+    public static function createFromRawData($rawData)
+    {
         if (false === $sep = strpos($rawData, "\r\n\r\n")) {
             throw new InvalidRequestException('End of headers not detected.');
         }
@@ -69,53 +75,142 @@ class Request implements RequestInterface {
      * @param array  $headers
      * @param string $body
      */
-    public function __construct($method, $path, $protocol, array $headers, $body = '') {
+    public function __construct($method, $path, $protocol, array $headers, $body = '')
+    {
         $this->method = strtoupper($method);
         $this->path = $path;
         $this->protocol = $protocol;
         $this->headers = new HeadersCollection($headers);
         $this->body = $body;
+
+        list($this->url, $this->parsedUrl, $this->query) = $this->parseUrl($path, $this->headers);
+    }
+
+    /**
+     * @param string                     $path
+     * @param HeadersCollectionInterface $headers
+     *
+     * @return array
+     */
+    private function parseUrl($path, HeadersCollectionInterface $headers)
+    {
+        $url = '/' . trim($path, '/');
+        if ($headers->has('host')) {
+            $url =  $url = 'tcp://' . $headers->getLine('host') . $url;
+        }
+        $parsedUrl = parse_url($url);
+
+        if (isset($parsedUrl['query'])) {
+            parse_str($parsedUrl['query'], $query);
+            $query = new Query($query);
+        } else {
+            $query = new Query;
+        }
+
+        return [$url, $parsedUrl, $query];
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getMethod() {
+    public function getMethod()
+    {
         return $this->method;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getPath() {
-        return $this->path;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getProtocol() {
+    public function getProtocol()
+    {
         return $this->protocol;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getHeaders() {
+    public function getHeaders()
+    {
         return $this->headers;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getBody() {
+    public function getBody()
+    {
         return $this->body;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function __toString() {
+    public function getUrl()
+    {
+        return $this->url;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getScheme()
+    {
+        return isset($this->parsedUrl['scheme']) ? $this->parsedUrl['scheme'] : '';
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getHost()
+    {
+        return isset($this->parsedUrl['host']) ? $this->parsedUrl['host'] : '';
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getPort()
+    {
+        return isset($this->parsedUrl['port']) ? $this->parsedUrl['port'] : '';
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getPath()
+    {
+        return isset($this->parsedUrl['path']) ? $this->parsedUrl['path'] : '';
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getQueryString()
+    {
+        return isset($this->parsedUrl['query']) ? $this->parsedUrl['query'] : '';
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getFragment()
+    {
+        return isset($this->parsedUrl['fragment']) ? $this->parsedUrl['fragment'] : '';
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getQuery()
+    {
+        return $this->query;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function __toString()
+    {
         $string = "{$this->getMethod()} {$this->getPath()} {$this->getProtocol()}\r\n";
         $string .= (string) $this->getHeaders();
         $string .= "\r\n\r\n";

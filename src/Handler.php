@@ -7,7 +7,10 @@ namespace Lexty\WebSocketServer;
 
 use Lexty\WebSocketServer\Payload\Payload;
 
-class Worker implements WorkerInterface {
+class Handler implements HandlerInterface
+{
+    use ReadonlyPropertiesAccessTrait;
+
     /**
      * @var resource
      */

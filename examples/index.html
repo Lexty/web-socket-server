@@ -30,7 +30,7 @@
             input  = document.getElementById('input'),
             submit = document.getElementById('submit'),
             form   = document.getElementById('form'),
-            ws     = new WebSocket("ws://10.58.2.173:8089/chat");
+            ws     = new WebSocket("ws://localhost:8080/chat?user=login&auth=token");
 
         ws.onopen = function () {
             addMessage(chat, 'Connection is opened. Type your message.');

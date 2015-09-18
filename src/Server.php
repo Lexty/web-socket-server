@@ -10,75 +10,81 @@ use Lexty\WebSocketServer\Exceptions\ConnectionException;
 /**
  * @link https://tools.ietf.org/html/rfc6455 RFC6455
  */
-class Server {
-    const POWERED_BY = 'Lexty-WebSocketServer/0.1';
+class Server
+{
+    const POWERED_BY = 'Lexty-WebSocketServer/0.0.2';
 
     private $host;
     private $port;
     private $pidFile;
-    private $workers;
+    private $handlers;
     private $applications = [];
 
-    public function __construct($host, $port, $pidFile, $workers = 1) {
+    public function __construct($host, $port, $pidFile, $handlers = 1)
+    {
         if (false !== strpos($host, ':')) {
             $host = '[' . $host . ']';
         }
-        $this->host = $host;
-        $this->port = $port;
-        $this->pidFile = $pidFile;
-        $this->workers = $workers;
+        $this->host     = $host;
+        $this->port     = $port;
+        $this->pidFile  = $pidFile;
+        $this->handlers = $handlers;
     }
+
     /**
      * @param string               $name
      * @param ApplicationInterface $application
      *
      * @return $this
      */
-    public function registerApplication($name, ApplicationInterface $application) {
+    public function registerApplication($name, ApplicationInterface $application)
+    {
         $this->applications[trim($name, '/')][] = $application;
         return $this;
     }
 
-    public function run() {
-        //открываем серверный сокет
+    public function run()
+    {
+        // open server socket
         $server = stream_socket_server("tcp://{$this->host}:{$this->port}", $errno, $errstr);
 
         if (false === $server) {
             throw new ConnectionException(sprintf('Could not bind to tcp://%s:%s: %s', $this->host, $this->port, $errstr), $errno);
         }
 
-        list($pid, $master, $workers) = $this->spawnWorkers();//создаём дочерние процессы
+        list($pid, $master, $handlers) = $this->spawnHandlers();//создаём дочерние процессы
 
-        if ($pid) {//мастер
-            fclose($server);//мастер не будет обрабатывать входящие соединения на основном сокете
-            $WebSocketMaster = new Master($workers);//мастер будет пересылать сообщения между воркерами
+        if ($pid) { // master
+            fclose($server);                         // master will not process incoming connections on the main socket
+            $WebSocketMaster = new Master($handlers); // he will forward messages between worker`s
             $WebSocketMaster->run();
-        } else {//воркер
-            $WebSocketHandler = new Worker($server, $this->applications);
+        } else { // worker
+            $WebSocketHandler = new Handler($server, $this->applications);
             $WebSocketHandler->run();
         }
     }
 
-    protected function spawnWorkers() {
-        $master = null;
-        $workers = array();
-        for ($i = 0; $i < $this->workers; $i++) {
-            //создаём парные сокеты, через них будут связываться мастер и воркер
+    protected function spawnHandlers()
+    {
+        $pid      = $master = null;
+        $handlers = [];
+        for ($i = 0; $i < $this->handlers; $i++) {
+            // creating twin sockets, they will be contacted by the master and the worker is
             $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
 
-            $pid = pcntl_fork();//создаём форк
+            $pid = pcntl_fork(); // fork
             if (-1 === $pid) {
                 throw new \RuntimeException('Could not fork process');
-            } elseif ($pid) { //мастер
+            } elseif ($pid) { // master
                 fclose($pair[0]);
-                $workers[$pid] = $pair[1];//один из пары будет в мастере
-            } else { //воркер
+                $handlers[$pid] = $pair[1]; // one of the pair is in the master
+            } else { // worker
                 fclose($pair[1]);
-                $master = $pair[0];//второй в воркере
+                $master = $pair[0];         // the second is in the worker
                 break;
             }
         }
 
-        return [$pid, $master, $workers];
+        return [$pid, $master, $handlers];
     }
 }

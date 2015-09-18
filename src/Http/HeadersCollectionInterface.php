@@ -5,7 +5,8 @@
 
 namespace Lexty\WebSocketServer\Http;
 
-interface HeadersCollectionInterface extends \IteratorAggregate, \Countable {
+interface HeadersCollectionInterface extends \IteratorAggregate, \Countable
+{
     /**
      * @return string[]
      */
@@ -13,14 +14,12 @@ interface HeadersCollectionInterface extends \IteratorAggregate, \Countable {
 
     /**
      * Returns the headers.
-     *
      * @return string[][]
      */
     public function all();
 
     /**
      * Returns the headers.
-     *
      * @return string[]
      */
     public function lines();

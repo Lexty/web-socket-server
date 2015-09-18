@@ -7,7 +7,8 @@ namespace Lexty\WebSocketServer\Http;
 
 use Lexty\WebSocketServer\ReadonlyPropertiesAccessTrait;
 
-class Response implements ResponseInterface {
+class Response implements ResponseInterface
+{
     use ReadonlyPropertiesAccessTrait;
 
     const HTTP_SWITCHING_PROTOCOLS = 101;
@@ -37,56 +38,63 @@ class Response implements ResponseInterface {
      * @param array  $headers
      * @param string $body
      */
-    public function __construct($statusCode, array $headers, $body = '') {
+    public function __construct($statusCode, array $headers, $body = '')
+    {
         if (!$this->verifyStatusCode($statusCode)) {
             throw new \InvalidArgumentException(sprintf('Status code "%s" are not supported.', $statusCode));
         }
-        $this->code = $statusCode;
+        $this->code    = $statusCode;
         $this->headers = new HeadersCollection($headers);
-        $this->body = $body;
+        $this->body    = $body;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getProtocol() {
+    public function getProtocol()
+    {
         return $this->protocol;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getHeaders() {
+    public function getHeaders()
+    {
         return $this->headers;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getBody() {
+    public function getBody()
+    {
         return $this->body;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getStatusCode() {
+    public function getStatusCode()
+    {
         return $this->code;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getStatusMessage() {
+    public function getStatusMessage()
+    {
         return self::$statusCodes[$this->code];
     }
 
     /**
      * {@inheritdoc}
      */
-    public function __toString() {
+    public function __toString()
+    {
         $string = "{$this->getProtocol()} {$this->getStatusCode()} {$this->getStatusMessage()}\r\n";
-        $string .= (string) $this->getHeaders();
+        $string .= (string)$this->getHeaders();
         $string .= "\r\n";
         $string .= $this->getBody();
         return $string;
@@ -97,7 +105,8 @@ class Response implements ResponseInterface {
      *
      * @return bool
      */
-    private function verifyStatusCode($statusCode) {
+    private function verifyStatusCode($statusCode)
+    {
         return is_int($statusCode) && isset(self::$statusCodes[$statusCode]);
     }
 }

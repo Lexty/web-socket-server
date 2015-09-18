@@ -5,7 +5,8 @@
 
 namespace Lexty\WebSocketServer\Http;
 
-interface ResponseInterface extends HttpMessageInterface {
+interface ResponseInterface extends HttpMessageInterface
+{
     /**
      * @return int
      */

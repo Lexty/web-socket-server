@@ -5,6 +5,7 @@
 
 namespace Lexty\WebSocketServer\Payload;
 
-class Payload extends AbstractPayload {
+class Payload extends AbstractPayload
+{
 
 }

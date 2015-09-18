@@ -16,7 +16,8 @@ use Lexty\WebSocketServer\Http\RequestInterface;
  * @property bool             $handshake
  * @property string           $applicationPath
  */
-interface ConnectionInterface {
+interface ConnectionInterface
+{
     /**
      * Send data to the connection.
      *
@@ -38,16 +39,22 @@ interface ConnectionInterface {
      * @return resource
      */
     public function getResource();
+
     public function getId();
+
     public function isClosed();
+
     public function getRemoteAddress();
 
     /**
      * @return RequestInterface
      */
     public function getRequest();
+
     public function getHandshake();
+
     public function doHandshake();
+
     /**
      * @return bool|string
      */

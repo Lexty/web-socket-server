@@ -5,7 +5,12 @@
 
 namespace Lexty\WebSocketServer\Payload;
 
-abstract class AbstractPayload implements PayloadInterface {
+use Lexty\WebSocketServer\ReadonlyPropertiesAccessTrait;
+
+abstract class AbstractPayload implements PayloadInterface
+{
+    use ReadonlyPropertiesAccessTrait;
+
     /**
      * @var string
      */
@@ -26,11 +31,12 @@ abstract class AbstractPayload implements PayloadInterface {
     /**
      * {@inheritdoc}
      */
-    public function __construct($data) {
+    public function __construct($data)
+    {
         $decoded = $this->decode($data);
         if (is_array($decoded)) {
-            $this->type = $decoded['type'];
-            $this->length = $decoded['length'];
+            $this->type    = $decoded['type'];
+            $this->length  = $decoded['length'];
             $this->message = $decoded['payload'];
         }
     }
@@ -38,47 +44,54 @@ abstract class AbstractPayload implements PayloadInterface {
     /**
      * {@inheritdoc}
      */
-    public function getType() {
+    public function getType()
+    {
         return $this->type;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getLength() {
+    public function getLength()
+    {
         return $this->length;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getMessage() {
+    public function getMessage()
+    {
         return $this->message;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function getError() {
+    public function getError()
+    {
         return $this->error;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function __toString() {
+    public function __toString()
+    {
         return $this->getMessage();
     }
 
     /**
      * {@inheritdoc}
      */
-    public function checkEncoding($encoding = null) {
+    public function checkEncoding($encoding = null)
+    {
         return mb_check_encoding($this->getMessage(), $encoding);
     }
 
-    public static function encode($payload, $type = PayloadInterface::TYPE_TEXT, $masked = false) {
-        $frameHead = array();
+    public static function encode($payload, $type = PayloadInterface::TYPE_TEXT, $masked = false)
+    {
+        $frameHead     = [];
         $payloadLength = strlen($payload);
 
         switch ($type) {
@@ -106,7 +119,7 @@ abstract class AbstractPayload implements PayloadInterface {
         // set mask and payload length (using 1, 3 or 9 bytes)
         if ($payloadLength > 65535) {
             $payloadLengthBin = str_split(sprintf('%064b', $payloadLength), 8);
-            $frameHead[1] = ($masked === true) ? 255 : 127;
+            $frameHead[1]     = ($masked === true) ? 255 : 127;
             for ($i = 0; $i < 8; $i++) {
                 $frameHead[$i + 2] = bindec($payloadLengthBin[$i]);
             }
@@ -116,9 +129,9 @@ abstract class AbstractPayload implements PayloadInterface {
             }
         } elseif ($payloadLength > 125) {
             $payloadLengthBin = str_split(sprintf('%016b', $payloadLength), 8);
-            $frameHead[1] = ($masked === true) ? 254 : 126;
-            $frameHead[2] = bindec($payloadLengthBin[0]);
-            $frameHead[3] = bindec($payloadLengthBin[1]);
+            $frameHead[1]     = ($masked === true) ? 254 : 126;
+            $frameHead[2]     = bindec($payloadLengthBin[0]);
+            $frameHead[3]     = bindec($payloadLengthBin[1]);
         } else {
             $frameHead[1] = ($masked === true) ? $payloadLength + 128 : $payloadLength;
         }
@@ -146,7 +159,8 @@ abstract class AbstractPayload implements PayloadInterface {
         return $frame;
     }
 
-    public static function decode($data) {
+    public static function decode($data)
+    {
         $unmaskedPayload = '';
         $decodedData     = [];
 
@@ -187,22 +201,22 @@ abstract class AbstractPayload implements PayloadInterface {
         }
 
         if ($payloadLength === 126) {
-            $mask = substr($data, 4, 4);
+            $mask          = substr($data, 4, 4);
             $payloadOffset = 8;
-            $dataLength = bindec(sprintf('%08b', ord($data[2])) . sprintf('%08b', ord($data[3]))) + $payloadOffset;
+            $dataLength    = bindec(sprintf('%08b', ord($data[2])) . sprintf('%08b', ord($data[3]))) + $payloadOffset;
         } elseif ($payloadLength === 127) {
-            $mask = substr($data, 10, 4);
+            $mask          = substr($data, 10, 4);
             $payloadOffset = 14;
-            $tmp = '';
+            $tmp           = '';
             for ($i = 0; $i < 8; $i++) {
                 $tmp .= sprintf('%08b', ord($data[$i + 2]));
             }
             $dataLength = bindec($tmp) + $payloadOffset;
             unset($tmp);
         } else {
-            $mask = substr($data, 2, 4);
+            $mask          = substr($data, 2, 4);
             $payloadOffset = 6;
-            $dataLength = $payloadLength + $payloadOffset;
+            $dataLength    = $payloadLength + $payloadOffset;
         }
 
         /**

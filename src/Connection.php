@@ -10,7 +10,8 @@ use Lexty\WebSocketServer\Payload\Payload;
 use Lexty\WebSocketServer\Http\Request;
 use Lexty\WebSocketServer\Http\RequestInterface;
 
-class Connection implements ConnectionInterface {
+class Connection implements ConnectionInterface
+{
     use ReadonlyPropertiesAccessTrait;
 
     /**
@@ -41,7 +42,8 @@ class Connection implements ConnectionInterface {
     /**
      * @param resource $connection
      */
-    public function __construct($connection) {
+    public function __construct($connection)
+    {
         if (!is_resource($connection) || get_resource_type($connection) !== 'stream') {
             throw new \InvalidArgumentException('First parameter must be a valid stream resource.');
         }
@@ -51,11 +53,12 @@ class Connection implements ConnectionInterface {
     /**
      * {@inheritdoc}
      */
-    public function send($data, $raw = false) {
-        $data = $raw ? (string) $data : Payload::encode((string) $data);
+    public function send($data, $raw = false)
+    {
+        $data = $raw ? (string)$data : Payload::encode((string)$data);
 
         $status = false;
-        $write = [$this->connection];
+        $write  = [$this->connection];
         if (stream_select($read, $write, $except, 0)) {
             foreach ($write as $client) {
                 $status = fwrite($client, $data);
@@ -67,14 +70,16 @@ class Connection implements ConnectionInterface {
     /**
      * {@inheritdoc}
      */
-    public function read($length = 1000) {
+    public function read($length = 1000)
+    {
         return fread($this->connection, $length);
     }
 
     /**
      * {@inheritdoc}
      */
-    public function close() {
+    public function close()
+    {
         if (is_resource($this->connection)) {
             stream_socket_shutdown($this->connection, STREAM_SHUT_RDWR);
             stream_set_blocking($this->connection, false);
@@ -85,54 +90,73 @@ class Connection implements ConnectionInterface {
     /**
      * {@inheritdoc}
      */
-    public function getResource() {
+    public function getResource()
+    {
         return $this->connection;
     }
 
-    public function getId() {
+    public function getId()
+    {
         return intval($this->getResource());
     }
 
-    public function getRequest() {
+    public function getRequest()
+    {
         return $this->request;
     }
 
     /**
      * @return string[]
      */
-    public function getWebSocketProtocols() {
+    public function getWebSocketProtocols()
+    {
         return $this->webSocketProtocols;
     }
 
     /**
      * @return int
      */
-    public function getWebSocketVersion() {
+    public function getWebSocketVersion()
+    {
         return $this->webSocketVersion;
     }
 
-    public function isClosed() {
+    /**
+     * @return bool
+     */
+    public function isClosed()
+    {
         return !is_resource($this->connection);
     }
 
-    public function getRemoteAddress() {
+    /**
+     * @return string
+     */
+    public function getRemoteAddress()
+    {
         if (null === $this->remoteAddress) {
             $this->remoteAddress = $this->parseAddress(stream_socket_get_name($this->connection, true));
         }
         return $this->remoteAddress;
     }
-    private function parseAddress($address) {
+
+    private function parseAddress($address)
+    {
         return trim(substr($address, 0, strrpos($address, ':')), '[]');
     }
 
-    public function doHandshake() {
+    /**
+     * @return bool
+     */
+    public function doHandshake()
+    {
         /** @var Request $request */
         /** @var Connection $conn */
         $request = $this->request;
         if (!$request) {
             // считываем загаловки из соединения
             $rawRequest = $this->read(10000);
-            $request = Request::createFromRawData($rawRequest);
+            $request    = Request::createFromRawData($rawRequest);
 
             $this->request = $request;
 
@@ -145,63 +169,35 @@ class Connection implements ConnectionInterface {
                 'Connection'           => 'Upgrade',
                 'Sec-WebSocket-Accept' => base64_encode(pack('H*', sha1($key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'))),
                 'X-Powered-By'         => Server::POWERED_BY,
-            ]);
-            if (false !== fwrite($this->connection, (string) $response)) {
+            ]
+            );
+            if (false !== fwrite($this->connection, (string)$response)) {
 //            if ($this->send($response, true)) {
                 $this->handshake = true;
             }
 
             return $this->handshake;
         }
-
-//        return (!$this->handshake && !$this->request) ? $this->receiveHandshake() : $this->sendHandshake();
     }
 
-    private function receiveHandshake() {
-        if ($this->handshake || $this->request) {
-            return false;
-        }
-        //считываем загаловки из соединения
-        $rawRequest = $this->read(10000);
-        $this->request = Request::createFromRawData($rawRequest);
-
-        return $this->request && $this->request->getHeaders()->getLine('Sec-WebSocket-Key');
-    }
-
-    private function sendHandshake() {
-        if ($this->handshake || !$this->request) {
-            return false;
-        }
-        $key = $this->request->getHeaders()->getLine('Sec-WebSocket-Key');
-        //отправляем заголовок согласно протоколу вебсокета
-        $response = new Response(Response::HTTP_SWITCHING_PROTOCOLS, [
-            'Upgrade'              => 'websocket',
-            'Connection'           => 'Upgrade',
-            'Sec-WebSocket-Accept' => base64_encode(pack('H*', sha1($key . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'))),
-            'X-Powered-By'         => Server::POWERED_BY,
-        ]);
-        if (false !== fwrite($this->connection, (string) $response)) {
-//            if ($this->send($response, true)) {
-            $this->handshake = true;
-            $this->webSocketVersion = (int) $this->request->getHeaders()->getLine('Sec-WebSocket-Version');
-            $this->webSocketProtocols = $this->request->getHeaders()->get('Sec-WebSocket-Protocol') ?: [];
-        }
-
-        return $this->handshake;
-    }
-
-    public function getHandshake() {
+    /**
+     * @return bool
+     */
+    public function getHandshake()
+    {
         return $this->handshake;
     }
 
     /**
      * @return bool|string
      */
-    public function getApplicationPath() {
+    public function getApplicationPath()
+    {
         return $this->request ? trim($this->request->getPath(), '/') : false;
     }
 
-    public function getPath() {
+    public function getPath()
+    {
         return 'chat';
     }
 }

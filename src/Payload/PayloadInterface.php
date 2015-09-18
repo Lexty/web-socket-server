@@ -5,17 +5,20 @@
 
 namespace Lexty\WebSocketServer\Payload;
 
-interface PayloadInterface {
+/**
+ * Interface PayloadInterface
+ * @property int    $length
+ * @property string $message
+ * @property string $type
+ * @property string $error
+ */
+interface PayloadInterface
+{
     const TYPE_TEXT   = 'text';
     const TYPE_BINARY = 'binary';
     const TYPE_CLOSE  = 'close';
     const TYPE_PING   = 'ping';
     const TYPE_PONG   = 'pong';
-
-    /**
-     * @param string $data
-     */
-    public function __construct($data);
 
     /**
      * @return int

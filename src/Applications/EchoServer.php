@@ -5,13 +5,15 @@
 
 namespace Lexty\WebSocketServer\Applications;
 
-use Lexty\WebSocketServer\AbstractApplication;
+use Lexty\WebSocketServer\BaseApplication;
 use Lexty\WebSocketServer\ConnectionInterface;
 use Lexty\WebSocketServer\Payload\PayloadInterface;
-use Lexty\WebSocketServer\WorkerInterface;
+use Lexty\WebSocketServer\HandlerInterface;
 
-class EchoServer extends AbstractApplication {
-    public function onMessage(ConnectionInterface $from, PayloadInterface $msg, WorkerInterface $worker) {
+class EchoServer extends BaseApplication
+{
+    public function onMessage(ConnectionInterface $from, PayloadInterface $msg, HandlerInterface $handler)
+    {
         $from->send($msg);
     }
 }
