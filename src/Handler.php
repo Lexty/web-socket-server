@@ -5,7 +5,7 @@
 
 namespace Lexty\WebSocketServer;
 
-use Lexty\WebSocketServer\Payload\Payload;
+use Lexty\WebSocketServer\Payload\PayloadInterface;
 
 class Handler implements HandlerInterface
 {
@@ -47,17 +47,23 @@ class Handler implements HandlerInterface
      * @var string
      */
     protected $connectionClass;
+    /**
+     * @var string
+     */
+    protected $payloadClass;
 
     /**
      * @param resource               $server
      * @param ApplicationInterface[] $applications
      * @param string                 $connectionClass
+     * @param string                 $payloadClass
      */
-    public function __construct($server, $applications, $connectionClass)
+    public function __construct($server, $applications, $connectionClass, $payloadClass)
     {
         $this->server          = $server;
         $this->applications    = $applications;
         $this->connectionClass = $connectionClass;
+        $this->payloadClass    = $payloadClass;
         $this->pid             = posix_getpid();
     }
 
@@ -132,6 +138,15 @@ class Handler implements HandlerInterface
     }
 
     /**
+     * @param string $data
+     *
+     * @return PayloadInterface
+     */
+    protected function createPayload($data) {
+        return new $this->payloadClass($data);
+    }
+
+    /**
      * @param resource $client Stream resource.
      *
      * @return ConnectionInterface
@@ -183,7 +198,7 @@ class Handler implements HandlerInterface
      */
     protected function fireMessage(ConnectionInterface $conn, $data)
     {
-        $payload = new Payload($data);
+        $payload = $this->createPayload($data);
         if (!isset($this->applications[$conn->applicationPath])) {
             return;
         }

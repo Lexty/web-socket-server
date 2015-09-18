@@ -19,7 +19,8 @@ class Server
     private $pidFile;
     private $handlers;
     private $applications = [];
-    private $connectionClass = 'Connection';
+    private $connectionClass = '\\Lexty\\WebSocketServer\\Connection';
+    private $payloadClass = '\\Lexty\\WebSocketServer\\Payload\\Payload';
 
     public function __construct($host, $port, $pidFile, $handlers = 1)
     {
@@ -56,6 +57,18 @@ class Server
         $this->connectionClass = $class;
     }
 
+    /**
+     * Sets the payload class name.
+     *
+     * Must implements PayloadInterface.
+     *
+     * @param string $class
+     */
+    public function setPayloadClass($class)
+    {
+        $this->payloadClass = $class;
+    }
+
     public function run()
     {
         // open server socket
@@ -72,7 +85,7 @@ class Server
             $WebSocketMaster = new Master($handlers); // he will forward messages between worker`s
             $WebSocketMaster->run();
         } else { // worker
-            $WebSocketHandler = new Handler($server, $this->applications, $this->connectionClass);
+            $WebSocketHandler = new Handler($server, $this->applications, $this->connectionClass, $this->payloadClass);
             $WebSocketHandler->run();
         }
     }
