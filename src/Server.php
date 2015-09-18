@@ -19,6 +19,7 @@ class Server
     private $pidFile;
     private $handlers;
     private $applications = [];
+    private $connectionClass = 'Connection';
 
     public function __construct($host, $port, $pidFile, $handlers = 1)
     {
@@ -43,6 +44,18 @@ class Server
         return $this;
     }
 
+    /**
+     * Sets the connection class name.
+     *
+     * Must implements ConnectionInterface.
+     *
+     * @param string $class
+     */
+    public function setConnectionClass($class)
+    {
+        $this->connectionClass = $class;
+    }
+
     public function run()
     {
         // open server socket
@@ -59,7 +72,7 @@ class Server
             $WebSocketMaster = new Master($handlers); // he will forward messages between worker`s
             $WebSocketMaster->run();
         } else { // worker
-            $WebSocketHandler = new Handler($server, $this->applications);
+            $WebSocketHandler = new Handler($server, $this->applications, $this->connectionClass);
             $WebSocketHandler->run();
         }
     }

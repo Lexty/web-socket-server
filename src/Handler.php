@@ -43,16 +43,22 @@ class Handler implements HandlerInterface
      * @var int
      */
     protected $maxConnectionsByIp = 0;
+    /**
+     * @var string
+     */
+    protected $connectionClass;
 
     /**
-     * @param $server
+     * @param resource               $server
      * @param ApplicationInterface[] $applications
+     * @param string                 $connectionClass
      */
-    public function __construct($server, $applications)
+    public function __construct($server, $applications, $connectionClass)
     {
-        $this->server       = $server;
-        $this->applications = $applications;
-        $this->pid          = posix_getpid();
+        $this->server          = $server;
+        $this->applications    = $applications;
+        $this->connectionClass = $connectionClass;
+        $this->pid             = posix_getpid();
     }
 
     public function run()
@@ -132,7 +138,7 @@ class Handler implements HandlerInterface
      */
     protected function createConnection($client)
     {
-        return new Connection($client);
+        return new $this->connectionClass($client);
     }
 
     /**
