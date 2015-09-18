@@ -153,7 +153,7 @@ class Handler implements HandlerInterface
      */
     protected function createConnection($client)
     {
-        return new $this->connectionClass($client);
+        return new $this->connectionClass($client, $this->payloadClass);
     }
 
     /**

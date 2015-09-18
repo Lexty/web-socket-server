@@ -6,7 +6,6 @@
 namespace Lexty\WebSocketServer;
 
 use Lexty\WebSocketServer\Http\Response;
-use Lexty\WebSocketServer\Payload\Payload;
 use Lexty\WebSocketServer\Http\Request;
 use Lexty\WebSocketServer\Http\RequestInterface;
 
@@ -38,16 +37,22 @@ class Connection implements ConnectionInterface
      * @var string
      */
     private $remoteAddress;
+    /**
+     * @var string
+     */
+    private $payloadClass;
 
     /**
      * @param resource $connection
+     * @param string   $payloadClass
      */
-    public function __construct($connection)
+    public function __construct($connection, $payloadClass)
     {
         if (!is_resource($connection) || get_resource_type($connection) !== 'stream') {
             throw new \InvalidArgumentException('First parameter must be a valid stream resource.');
         }
         $this->connection = $connection;
+        $this->payloadClass = $payloadClass;
     }
 
     /**
@@ -55,7 +60,7 @@ class Connection implements ConnectionInterface
      */
     public function send($data, $raw = false)
     {
-        $data = $raw ? (string)$data : Payload::encode((string)$data);
+        $data = $raw ? (string) $data : call_user_func([$this->payloadClass, 'encode'], (string) $data);
 
         $status = false;
         $write  = [$this->connection];
