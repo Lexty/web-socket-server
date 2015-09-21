@@ -3,8 +3,7 @@
  * @author Alexandr Medvedev <medvedevav@niissu.ru>
  */
 
-namespace Lexty\WebSocketServer;
-
+namespace Lexty\WebSocketServer\Connection;
 
 use Lexty\WebSocketServer\Http\RequestInterface;
 
@@ -21,14 +20,14 @@ interface ConnectionInterface
     /**
      * Send data to the connection.
      *
-     * @param string     $data
-     * @param bool|false $raw
+     * @param string    $data
+     * @param bool|true $encode
      *
      * @return ConnectionInterface
      */
-    public function send($data, $raw = false);
+    public function send($data, $encode = true);
 
-    public function read($length = 1000);
+    public function read($length = 1000, $decode = true);
 
     /**
      * Close the connection

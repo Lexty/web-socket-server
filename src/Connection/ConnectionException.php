@@ -1,5 +1,5 @@
 <?php
 
-namespace Lexty\WebSocketServer\Exceptions;
+namespace Lexty\WebSocketServer\Connection;
 
 class ConnectionException extends \RuntimeException {}

@@ -5,6 +5,7 @@
 
 namespace Lexty\WebSocketServer;
 
+use Lexty\WebSocketServer\Connection\ConnectionInterface;
 use Lexty\WebSocketServer\Payload\PayloadInterface;
 
 class BaseApplication implements ApplicationInterface

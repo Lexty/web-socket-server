@@ -3,16 +3,23 @@
  * @author Alexandr Medvedev <medvedevav@niissu.ru>
  */
 
-namespace Lexty\WebSocketServer;
+namespace Lexty\WebSocketServer\Connection;
 
-use Lexty\WebSocketServer\Http\Response;
 use Lexty\WebSocketServer\Http\Request;
 use Lexty\WebSocketServer\Http\RequestInterface;
+use Lexty\WebSocketServer\Http\Response;
+use Lexty\WebSocketServer\Payload\PayloadFactoryInterface;
+use Lexty\WebSocketServer\ReadonlyPropertiesAccessTrait;
+use Lexty\WebSocketServer\Server;
 
 class Connection implements ConnectionInterface
 {
     use ReadonlyPropertiesAccessTrait;
 
+    /**
+     * @var PayloadFactoryInterface
+     */
+    private $payloadFactory;
     /**
      * @var resource
      */
@@ -37,30 +44,26 @@ class Connection implements ConnectionInterface
      * @var string
      */
     private $remoteAddress;
-    /**
-     * @var string
-     */
-    private $payloadClass;
 
     /**
-     * @param resource $connection
-     * @param string   $payloadClass
+     * @param resource                $connection
+     * @param PayloadFactoryInterface $payloadFactory
      */
-    public function __construct($connection, $payloadClass)
+    public function __construct($connection, PayloadFactoryInterface $payloadFactory)
     {
         if (!is_resource($connection) || get_resource_type($connection) !== 'stream') {
             throw new \InvalidArgumentException('First parameter must be a valid stream resource.');
         }
         $this->connection = $connection;
-        $this->payloadClass = $payloadClass;
+        $this->payloadFactory = $payloadFactory;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function send($data, $raw = false)
+    public function send($data, $encode = true)
     {
-        $data = $raw ? (string) $data : call_user_func([$this->payloadClass, 'encode'], (string) $data);
+        $data = $encode ? $this->payloadFactory->encode($data) : (string) $data;
 
         $status = false;
         $write  = [$this->connection];
@@ -75,9 +78,13 @@ class Connection implements ConnectionInterface
     /**
      * {@inheritdoc}
      */
-    public function read($length = 1000)
+    public function read($length = 1000, $decode = true)
     {
-        return fread($this->connection, $length);
+        $data = fread($this->connection, $length);
+        if ($decode && strlen($data)) {
+            $data = $this->payloadFactory->create($data);
+        }
+        return $data;
     }
 
     /**
@@ -160,7 +167,7 @@ class Connection implements ConnectionInterface
         $request = $this->request;
         if (!$request) {
             // считываем загаловки из соединения
-            $rawRequest = $this->read(10000);
+            $rawRequest = $this->read(10000, false);
             $request    = Request::createFromRawData($rawRequest);
 
             $this->request = $request;
@@ -176,7 +183,7 @@ class Connection implements ConnectionInterface
                 'X-Powered-By'         => Server::POWERED_BY,
             ]
             );
-            if (false !== fwrite($this->connection, (string)$response)) {
+            if (false !== fwrite($this->connection, (string) $response)) {
 //            if ($this->send($response, true)) {
                 $this->handshake = true;
             }
@@ -199,10 +206,5 @@ class Connection implements ConnectionInterface
     public function getApplicationPath()
     {
         return $this->request ? trim($this->request->getPath(), '/') : false;
-    }
-
-    public function getPath()
-    {
-        return 'chat';
     }
 }

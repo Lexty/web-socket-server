@@ -6,7 +6,7 @@
 namespace Lexty\WebSocketServer\Applications;
 
 use Lexty\WebSocketServer\BaseApplication;
-use Lexty\WebSocketServer\ConnectionInterface;
+use Lexty\WebSocketServer\Connection\ConnectionInterface;
 use Lexty\WebSocketServer\Payload\PayloadInterface;
 use Lexty\WebSocketServer\HandlerInterface;
 
@@ -37,6 +37,7 @@ class Chat extends BaseApplication
         $message = 'user #' . $from->id . ' (' . $handler->pid . '): ' . strip_tags($msg);
 
         foreach ($this->clients as $client) {
+
             $client->send($message);
         }
     }

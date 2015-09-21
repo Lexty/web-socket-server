@@ -5,12 +5,25 @@
 
 namespace Lexty\WebSocketServer;
 
+use Lexty\WebSocketServer\Connection\ConnectionException;
+use Lexty\WebSocketServer\Connection\ConnectionInterface;
+use Lexty\WebSocketServer\Payload\PayloadException;
 use Lexty\WebSocketServer\Payload\PayloadInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class Handler implements HandlerInterface
 {
     use ReadonlyPropertiesAccessTrait;
 
+    /**
+     * @var ContainerInterface
+     */
+    private $container;
+    /**
+     * @var EventDispatcherInterface
+     */
+    private $dispatcher;
     /**
      * @var resource
      */
@@ -53,18 +66,18 @@ class Handler implements HandlerInterface
     protected $payloadClass;
 
     /**
-     * @param resource               $server
-     * @param ApplicationInterface[] $applications
-     * @param string                 $connectionClass
-     * @param string                 $payloadClass
+     * @param resource                 $server
+     * @param ApplicationInterface[]   $applications
+     * @param ContainerInterface       $container
+     * @param EventDispatcherInterface $dispatcher
      */
-    public function __construct($server, $applications, $connectionClass, $payloadClass)
+    public function __construct($server, $applications, ContainerInterface $container, EventDispatcherInterface $dispatcher)
     {
-        $this->server          = $server;
-        $this->applications    = $applications;
-        $this->connectionClass = $connectionClass;
-        $this->payloadClass    = $payloadClass;
-        $this->pid             = posix_getpid();
+        $this->server       = $server;
+        $this->applications = $applications;
+        $this->container    = $container;
+        $this->dispatcher   = $dispatcher;
+        $this->pid          = posix_getpid();
     }
 
     public function run()
@@ -89,7 +102,7 @@ class Handler implements HandlerInterface
                     ) {
                         $conn->close();
                     } else {
-                    $this->addConnection($conn);
+                        $this->addConnection($conn);
                     }
                 }
 
@@ -107,16 +120,24 @@ class Handler implements HandlerInterface
                             $conn->close();
                         }
                     } else if ($conn && $conn->handshake) {
-                        $data = $conn->read();
+                        try {
+                            try {
+                                $data = $conn->read();
 
-                        if (!strlen($data)) { // connection has been closed
-                            $conn->close();
-                            $this->fireClose($conn);
-                            $this->removeConnection($conn);
-                            continue;
+                                if (!strlen($data)) { // connection has been closed
+                                    $conn->close();
+                                    $this->fireClose($conn);
+                                    $this->removeConnection($conn);
+                                    continue;
+                                }
+
+                                $this->fireMessage($conn, $data);
+                            } catch (\Exception $e) {
+                                $this->fireError($conn, $e);
+                            }
+                        } catch (\Exception $exception) {
+                            $this->exceptionHandler($exception);
                         }
-
-                        $this->fireMessage($conn, $data);
                     }
                 }
             }
@@ -124,26 +145,25 @@ class Handler implements HandlerInterface
             if ($write) {
                 foreach ($write as $client) {
                     $conn = $this->getConnection($client);
-                    if (!$conn->request) { // if handshake has not been received
-                        continue;          // then answer a handshake still early
-                    }
-                    if ($conn->doHandshake()) {
-                        unset($write[$conn->id]);
-                    }
+                    try {
+                        try {
+                            if (!$conn->request) { // if handshake has not been received
+                                continue;          // then answer a handshake still early
+                            }
+                            if ($conn->doHandshake()) {
+                                unset($write[$conn->id]);
+                            }
 
-                    $this->fireOpen($conn);
+                            $this->fireOpen($conn);
+                        } catch (\Exception $e) {
+                            $this->fireError($conn, $e);
+                        }
+                    } catch (\Exception $exception) {
+                        $this->exceptionHandler($exception);
+                    }
                 }
             }
         }
-    }
-
-    /**
-     * @param string $data
-     *
-     * @return PayloadInterface
-     */
-    protected function createPayload($data) {
-        return new $this->payloadClass($data);
     }
 
     /**
@@ -153,7 +173,7 @@ class Handler implements HandlerInterface
      */
     protected function createConnection($client)
     {
-        return new $this->connectionClass($client, $this->payloadClass);
+        return $this->container->get('connection_factory')->create($client);
     }
 
     /**
@@ -194,11 +214,10 @@ class Handler implements HandlerInterface
 
     /**
      * @param ConnectionInterface $conn
-     * @param string              $data
+     * @param PayloadInterface    $payload
      */
-    protected function fireMessage(ConnectionInterface $conn, $data)
+    protected function fireMessage(ConnectionInterface $conn, PayloadInterface $payload)
     {
-        $payload = $this->createPayload($data);
         if (!isset($this->applications[$conn->applicationPath])) {
             return;
         }
@@ -234,6 +253,22 @@ class Handler implements HandlerInterface
     }
 
     /**
+     * @param ConnectionInterface $conn
+     * @param \Exception          $exception
+     *
+     * @throws \Exception
+     */
+    protected function fireError(ConnectionInterface $conn, \Exception $exception)
+    {
+        if (!isset($this->applications[$conn->applicationPath])) {
+            throw $exception;
+        }
+        foreach ($this->applications[$conn->applicationPath] as $application) {
+            $application->onError($conn, $exception, $this);
+        }
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function getPid()
@@ -247,5 +282,15 @@ class Handler implements HandlerInterface
     public function getConnectionsCount()
     {
         return count($this->clients);
+    }
+
+    /**
+     * @param \Exception $e
+     */
+    protected function exceptionHandler(\Exception $e) {
+        printf("Uncaught exception '%s' with message '%s in %s:%d\n", get_class($e), $e->getMessage(), $e->getFile(), $e->getLine());
+        printf("Stack trace:\n");
+        printf("%s\n", $e->getTraceAsString());
+        printf("  thrown in %s on line %d\n", $e->getFile(), $e->getLine());
     }
 }

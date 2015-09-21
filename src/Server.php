@@ -5,25 +5,49 @@
 
 namespace Lexty\WebSocketServer;
 
-use Lexty\WebSocketServer\Exceptions\ConnectionException;
+use Lexty\WebSocketServer\Connection\ConnectionException;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\EventDispatcher\ContainerAwareEventDispatcher;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 /**
  * @link https://tools.ietf.org/html/rfc6455 RFC6455
  */
 class Server
 {
-    const POWERED_BY = 'Lexty-WebSocketServer/0.0.2';
+    const POWERED_BY = 'Lexty-WebSocketServer/0.0.5';
+
+    /**
+     * @var ContainerInterface
+     */
+    private $container;
+    /**
+     * @var EventDispatcherInterface
+     */
+    private $dispatcher;
 
     private $host;
     private $port;
     private $pidFile;
     private $handlers;
     private $applications = [];
-    private $connectionClass = '\\Lexty\\WebSocketServer\\Connection';
-    private $payloadClass = '\\Lexty\\WebSocketServer\\Payload\\Payload';
 
-    public function __construct($host, $port, $pidFile, $handlers = 1)
+    public function __construct($host, $port, $pidFile, $handlers = 1, ContainerInterface $container = null, EventDispatcherInterface $dispatcher = null)
     {
+        $this->container = $container ?: new ContainerBuilder;
+        $this->dispatcher = $dispatcher ?: new ContainerAwareEventDispatcher($this->container);
+
+        if (!$this->container->has('payload_factory')) {
+            $this->container->register('payload_factory', 'Lexty\\WebSocketServer\\Payload\\PayloadFactory');
+        }
+        if (!$this->container->has('connection_factory')) {
+            $this->container
+                ->register('connection_factory', 'Lexty\\WebSocketServer\\Connection\\ConnectionFactory')
+                ->addArgument(new Reference('payload_factory'));
+        }
+
         if (false !== strpos($host, ':')) {
             $host = '[' . $host . ']';
         }
@@ -45,30 +69,6 @@ class Server
         return $this;
     }
 
-    /**
-     * Sets the connection class name.
-     *
-     * Must implements ConnectionInterface.
-     *
-     * @param string $class
-     */
-    public function setConnectionClass($class)
-    {
-        $this->connectionClass = $class;
-    }
-
-    /**
-     * Sets the payload class name.
-     *
-     * Must implements PayloadInterface.
-     *
-     * @param string $class
-     */
-    public function setPayloadClass($class)
-    {
-        $this->payloadClass = $class;
-    }
-
     public function run()
     {
         // open server socket
@@ -81,11 +81,11 @@ class Server
         list($pid, $master, $handlers) = $this->spawnHandlers();//создаём дочерние процессы
 
         if ($pid) { // master
-            fclose($server);                         // master will not process incoming connections on the main socket
+            fclose($server);                          // master will not process incoming connections on the main socket
             $WebSocketMaster = new Master($handlers); // he will forward messages between worker`s
             $WebSocketMaster->run();
         } else { // worker
-            $WebSocketHandler = new Handler($server, $this->applications, $this->connectionClass, $this->payloadClass);
+            $WebSocketHandler = new Handler($server, $this->applications, $this->container, $this->dispatcher);
             $WebSocketHandler->run();
         }
     }

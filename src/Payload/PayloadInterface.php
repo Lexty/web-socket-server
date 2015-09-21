@@ -7,6 +7,7 @@ namespace Lexty\WebSocketServer\Payload;
 
 /**
  * Interface PayloadInterface
+ *
  * @property int    $length
  * @property string $message
  * @property string $type

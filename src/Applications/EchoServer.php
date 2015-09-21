@@ -6,7 +6,7 @@
 namespace Lexty\WebSocketServer\Applications;
 
 use Lexty\WebSocketServer\BaseApplication;
-use Lexty\WebSocketServer\ConnectionInterface;
+use Lexty\WebSocketServer\Connection\ConnectionInterface;
 use Lexty\WebSocketServer\Payload\PayloadInterface;
 use Lexty\WebSocketServer\HandlerInterface;
 
