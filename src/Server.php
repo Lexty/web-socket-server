@@ -21,7 +21,7 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
  */
 class Server
 {
-    const POWERED_BY = 'Lexty-WebSocketServer/0.1.0';
+    const POWERED_BY = 'Lexty-WebSocketServer/0.1.1';
 
     /**
      * @var ContainerInterface
