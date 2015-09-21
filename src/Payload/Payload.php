@@ -23,10 +23,6 @@ class Payload implements PayloadInterface
      * @var string
      */
     protected $message;
-    /**
-     * @var string
-     */
-    protected $error;
 
     /**
      * {@inheritdoc}
@@ -68,14 +64,6 @@ class Payload implements PayloadInterface
     /**
      * {@inheritdoc}
      */
-    public function getError()
-    {
-        return $this->error;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
     public function __toString()
     {
         return $this->getMessage();
@@ -89,6 +77,13 @@ class Payload implements PayloadInterface
         return mb_check_encoding($this->getMessage(), $encoding);
     }
 
+    /**
+     * @param string     $payload
+     * @param string     $type
+     * @param bool|false $masked
+     *
+     * @return string
+     */
     public static function encode($payload, $type = PayloadInterface::TYPE_TEXT, $masked = false)
     {
         $frameHead     = [];
@@ -159,6 +154,11 @@ class Payload implements PayloadInterface
         return $frame;
     }
 
+    /**
+     * @param string $data
+     *
+     * @return array|bool
+     */
     public static function decode($data)
     {
         $unmaskedPayload = '';
@@ -172,7 +172,7 @@ class Payload implements PayloadInterface
         $payloadLength    = ord($data[1]) & 127;
 
         // unmasked frame is received:
-        if (!!$isMasked) {
+        if (!$isMasked) {
             throw new PayloadException('Protocol error', 1002);
         }
 

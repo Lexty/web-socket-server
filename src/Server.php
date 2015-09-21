@@ -6,6 +6,10 @@
 namespace Lexty\WebSocketServer;
 
 use Lexty\WebSocketServer\Connection\ConnectionException;
+use Lexty\WebSocketServer\Events\ConnectionEvent;
+use Lexty\WebSocketServer\Events\ErrorEvent;
+use Lexty\WebSocketServer\Events\MessageEvent;
+use Lexty\WebSocketServer\Events\ServerEvent;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Reference;
@@ -17,7 +21,7 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
  */
 class Server
 {
-    const POWERED_BY = 'Lexty-WebSocketServer/0.0.5';
+    const POWERED_BY = 'Lexty-WebSocketServer/0.1.0';
 
     /**
      * @var ContainerInterface
@@ -27,15 +31,43 @@ class Server
      * @var EventDispatcherInterface
      */
     private $dispatcher;
-
+    /**
+     * @var string
+     */
     private $host;
+    /**
+     * @var int
+     */
     private $port;
+    /**
+     * @var string
+     */
     private $pidFile;
+    /**
+     * @var int
+     */
     private $handlers;
+    /**
+     * @var ApplicationInterface[][]
+     */
     private $applications = [];
 
-    public function __construct($host, $port, $pidFile, $handlers = 1, ContainerInterface $container = null, EventDispatcherInterface $dispatcher = null)
-    {
+    /**
+     * @param string                        $host
+     * @param int                           $port
+     * @param string                        $pidFile
+     * @param int                           $handlers
+     * @param ContainerInterface|null       $container
+     * @param EventDispatcherInterface|null $dispatcher
+     */
+    public function __construct(
+        $host = 'localhost',
+        $port = 8080,
+        $pidFile = '/tmp/web-socket-server.pid',
+        $handlers = 1,
+        ContainerInterface $container = null,
+        EventDispatcherInterface $dispatcher = null
+    ) {
         $this->container = $container ?: new ContainerBuilder;
         $this->dispatcher = $dispatcher ?: new ContainerAwareEventDispatcher($this->container);
 
@@ -55,6 +87,11 @@ class Server
         $this->port     = $port;
         $this->pidFile  = $pidFile;
         $this->handlers = $handlers;
+
+        $this->dispatcher->addListener(Events::OPEN, [$this, 'onOpen'], 10);
+        $this->dispatcher->addListener(Events::CLOSE, [$this, 'onClose'], 10);
+        $this->dispatcher->addListener(Events::MESSAGE, [$this, 'onMessage'], 10);
+        $this->dispatcher->addListener(Events::ERROR, [$this, 'onError'], 10);
     }
 
     /**
@@ -71,22 +108,70 @@ class Server
 
     public function run()
     {
-        // open server socket
-        $server = stream_socket_server("tcp://{$this->host}:{$this->port}", $errno, $errstr);
+        try {
+            // open server socket
+            $server = stream_socket_server("tcp://{$this->host}:{$this->port}", $errno, $errstr);
 
-        if (false === $server) {
-            throw new ConnectionException(sprintf('Could not bind to tcp://%s:%s: %s', $this->host, $this->port, $errstr), $errno);
+            if (false === $server) {
+                throw new ConnectionException(sprintf('Could not bind to tcp://%s:%s: %s', $this->host, $this->port, $errstr), $errno);
+            }
+
+            list($pid, $master, $handlers) = $this->spawnHandlers();//создаём дочерние процессы
+
+            if ($pid) { // master
+                fclose($server);                          // master will not process incoming connections on the main socket
+                $WebSocketMaster = new Master($handlers); // he will forward messages between worker`s
+                $WebSocketMaster->run();
+            } else { // worker
+                $WebSocketHandler = new Handler($server, $this->container, $this->dispatcher);
+                $WebSocketHandler->run();
+            }
+        } catch (\Exception $e) {
+            $this->dispatcher->dispatch(Events::SHUTDOWN, new ServerEvent);
+            throw $e;
         }
+        $this->dispatcher->dispatch(Events::SHUTDOWN, new ServerEvent);
+    }
 
-        list($pid, $master, $handlers) = $this->spawnHandlers();//создаём дочерние процессы
+    /**
+     * @param MessageEvent $event
+     */
+    public function onMessage(MessageEvent $event)
+    {
+        foreach ($this->getApplications($event->connection->applicationPath) as $application) {
+            $application->onMessage($event->connection, $event->payload, $event->handler);
+        }
+    }
 
-        if ($pid) { // master
-            fclose($server);                          // master will not process incoming connections on the main socket
-            $WebSocketMaster = new Master($handlers); // he will forward messages between worker`s
-            $WebSocketMaster->run();
-        } else { // worker
-            $WebSocketHandler = new Handler($server, $this->applications, $this->container, $this->dispatcher);
-            $WebSocketHandler->run();
+    /**
+     * @param ConnectionEvent $event
+     */
+    public function onOpen(ConnectionEvent $event)
+    {
+        foreach ($this->getApplications($event->connection->applicationPath) as $application) {
+            $application->onOpen($event->connection, $event->handler);
+        }
+    }
+
+    /**
+     * @param ConnectionEvent $event
+     */
+    public function onClose(ConnectionEvent $event)
+    {
+        foreach ($this->getApplications($event->connection->applicationPath) as $application) {
+            $application->onClose($event->connection, $event->handler);
+        }
+    }
+
+    /**
+     * @param ErrorEvent $event
+     *
+     * @throws \Exception
+     */
+    public function onError(ErrorEvent $event)
+    {
+        foreach ($this->getApplications($event->connection->applicationPath) as $application) {
+            $application->onError($event->connection, $event->exception, $event->handler);
         }
     }
 
@@ -112,5 +197,15 @@ class Server
         }
 
         return [$pid, $master, $handlers];
+    }
+
+    /**
+     * @param string $path
+     *
+     * @return ApplicationInterface[]
+     */
+    protected function getApplications($path)
+    {
+        return isset($this->applications[$path]) ? $this->applications[$path] : [];
     }
 }

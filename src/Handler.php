@@ -5,9 +5,10 @@
 
 namespace Lexty\WebSocketServer;
 
-use Lexty\WebSocketServer\Connection\ConnectionException;
 use Lexty\WebSocketServer\Connection\ConnectionInterface;
-use Lexty\WebSocketServer\Payload\PayloadException;
+use Lexty\WebSocketServer\Events\ConnectionEvent;
+use Lexty\WebSocketServer\Events\ErrorEvent;
+use Lexty\WebSocketServer\Events\MessageEvent;
 use Lexty\WebSocketServer\Payload\PayloadInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -41,10 +42,6 @@ class Handler implements HandlerInterface
      */
     protected $connections = [];
     /**
-     * @var ApplicationInterface[][]
-     */
-    protected $applications = [];
-    /**
      * @var int[]
      */
     protected $ips = [];
@@ -67,17 +64,31 @@ class Handler implements HandlerInterface
 
     /**
      * @param resource                 $server
-     * @param ApplicationInterface[]   $applications
      * @param ContainerInterface       $container
      * @param EventDispatcherInterface $dispatcher
      */
-    public function __construct($server, $applications, ContainerInterface $container, EventDispatcherInterface $dispatcher)
+    public function __construct($server, ContainerInterface $container, EventDispatcherInterface $dispatcher)
     {
         $this->server       = $server;
-        $this->applications = $applications;
         $this->container    = $container;
         $this->dispatcher   = $dispatcher;
         $this->pid          = posix_getpid();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getPid()
+    {
+        return $this->pid;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getConnectionsCount()
+    {
+        return count($this->clients);
     }
 
     public function run()
@@ -103,6 +114,7 @@ class Handler implements HandlerInterface
                         $conn->close();
                     } else {
                         $this->addConnection($conn);
+                        $this->dispatcher->dispatch(Events::CONNECT, new ConnectionEvent($conn, $this));
                     }
                 }
 
@@ -115,9 +127,11 @@ class Handler implements HandlerInterface
                     if ($conn && !$conn->handshake && !$conn->request) {
                         if ($conn->doHandshake()) {
                             $write[$conn->id] = $conn->resource;
+                            $this->dispatcher->dispatch(Events::HANDSHAKE_READ, new ConnectionEvent($conn, $this));
                         } else {
                             $this->removeConnection($conn);
                             $conn->close();
+                            $this->dispatcher->dispatch(Events::DISCONNECT, new ConnectionEvent($conn, $this));
                         }
                     } else if ($conn && $conn->handshake) {
                         try {
@@ -126,14 +140,18 @@ class Handler implements HandlerInterface
 
                                 if (!strlen($data)) { // connection has been closed
                                     $conn->close();
-                                    $this->fireClose($conn);
+//                                    $this->fireClose($conn);
                                     $this->removeConnection($conn);
+                                    $this->dispatcher->dispatch(Events::DISCONNECT, new ConnectionEvent($conn, $this));
+                                    $this->dispatcher->dispatch(Events::CLOSE, new ConnectionEvent($conn, $this));
                                     continue;
                                 }
 
-                                $this->fireMessage($conn, $data);
+//                                $this->fireMessage($conn, $data);
+                                $this->dispatcher->dispatch(Events::MESSAGE, new MessageEvent($conn, $data, $this));
                             } catch (\Exception $e) {
-                                $this->fireError($conn, $e);
+//                                $this->fireError($conn, $e);
+                                $this->dispatcher->dispatch(Events::ERROR, new ErrorEvent($conn, $e, $this));
                             }
                         } catch (\Exception $exception) {
                             $this->exceptionHandler($exception);
@@ -152,11 +170,14 @@ class Handler implements HandlerInterface
                             }
                             if ($conn->doHandshake()) {
                                 unset($write[$conn->id]);
+                                $this->dispatcher->dispatch(Events::HANDSHAKE_SEND, new ConnectionEvent($conn, $this));
                             }
 
-                            $this->fireOpen($conn);
+//                            $this->fireOpen($conn);
+                            $this->dispatcher->dispatch(Events::OPEN, new ConnectionEvent($conn, $this));
                         } catch (\Exception $e) {
-                            $this->fireError($conn, $e);
+//                            $this->fireError($conn, $e);
+                            $this->dispatcher->dispatch(Events::ERROR, new ErrorEvent($conn, $e, $this));
                         }
                     } catch (\Exception $exception) {
                         $this->exceptionHandler($exception);
@@ -210,78 +231,6 @@ class Handler implements HandlerInterface
             @$this->ips[$conn->remoteAddress]--;
         }
         unset($this->clients[$conn->id], $this->handshakes[$conn->id], $this->connections[$conn->id]);
-    }
-
-    /**
-     * @param ConnectionInterface $conn
-     * @param PayloadInterface    $payload
-     */
-    protected function fireMessage(ConnectionInterface $conn, PayloadInterface $payload)
-    {
-        if (!isset($this->applications[$conn->applicationPath])) {
-            return;
-        }
-        foreach ($this->applications[$conn->applicationPath] as $application) {
-            $application->onMessage($conn, $payload, $this);
-        }
-    }
-
-    /**
-     * @param ConnectionInterface $conn
-     */
-    protected function fireOpen(ConnectionInterface $conn)
-    {
-        if (!isset($this->applications[$conn->applicationPath])) {
-            return;
-        }
-        foreach ($this->applications[$conn->applicationPath] as $application) {
-            $application->onOpen($conn, $this);
-        }
-    }
-
-    /**
-     * @param ConnectionInterface $conn
-     */
-    protected function fireClose(ConnectionInterface $conn)
-    {
-        if (!isset($this->applications[$conn->applicationPath])) {
-            return;
-        }
-        foreach ($this->applications[$conn->applicationPath] as $application) {
-            $application->onClose($conn, $this);
-        }
-    }
-
-    /**
-     * @param ConnectionInterface $conn
-     * @param \Exception          $exception
-     *
-     * @throws \Exception
-     */
-    protected function fireError(ConnectionInterface $conn, \Exception $exception)
-    {
-        if (!isset($this->applications[$conn->applicationPath])) {
-            throw $exception;
-        }
-        foreach ($this->applications[$conn->applicationPath] as $application) {
-            $application->onError($conn, $exception, $this);
-        }
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getPid()
-    {
-        return $this->pid;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function getConnectionsCount()
-    {
-        return count($this->clients);
     }
 
     /**

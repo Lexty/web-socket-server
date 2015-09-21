@@ -39,11 +39,6 @@ interface PayloadInterface
     /**
      * @return string
      */
-    public function getError();
-
-    /**
-     * @return string
-     */
     public function __toString();
 
     /**

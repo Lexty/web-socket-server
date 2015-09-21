@@ -5,7 +5,6 @@
 
 namespace Lexty\WebSocketServer;
 
-
 /**
  * Interface HandlerInterface
  *
