@@ -57,7 +57,7 @@ class Server
      * @param int                           $port
      * @param string                        $pidFile
      * @param int                           $handlers
-     * @param ContainerInterface|null       $container
+     * @param ContainerBuilder|null         $container
      * @param EventDispatcherInterface|null $dispatcher
      */
     public function __construct(
@@ -65,20 +65,13 @@ class Server
         $port = 8080,
         $pidFile = '/tmp/web-socket-server.pid',
         $handlers = 1,
-        ContainerInterface $container = null,
+        ContainerBuilder $container = null,
         EventDispatcherInterface $dispatcher = null
     ) {
         $this->container = $container ?: new ContainerBuilder;
         $this->dispatcher = $dispatcher ?: new ContainerAwareEventDispatcher($this->container);
 
-        if (!$this->container->has('payload_factory')) {
-            $this->container->register('payload_factory', 'Lexty\\WebSocketServer\\Payload\\PayloadFactory');
-        }
-        if (!$this->container->has('connection_factory')) {
-            $this->container
-                ->register('connection_factory', 'Lexty\\WebSocketServer\\Connection\\ConnectionFactory')
-                ->addArgument(new Reference('payload_factory'));
-        }
+        $this->containerDefinitions($this->container);
 
         if (false !== strpos($host, ':')) {
             $host = '[' . $host . ']';
@@ -116,21 +109,24 @@ class Server
                 throw new ConnectionException(sprintf('Could not bind to tcp://%s:%s: %s', $this->host, $this->port, $errstr), $errno);
             }
 
-            list($pid, $master, $handlers) = $this->spawnHandlers();//создаём дочерние процессы
+            list($pid, $master, $handlers) = $this->spawnHandlers(); // create a child process
+
+            $handlerClass = $this->container->getParameter('lexty.websocketserver.handler.class');
 
             if ($pid) { // master
                 fclose($server);                          // master will not process incoming connections on the main socket
                 $WebSocketMaster = new Master($handlers); // he will forward messages between worker`s
                 $WebSocketMaster->run();
             } else { // worker
-                $WebSocketHandler = new Handler($server, $this->container, $this->dispatcher);
+                /** @var HandlerInterface $WebSocketHandler */
+                $WebSocketHandler = new $handlerClass($server, $this->container->get('lexty.websocketserver.connection_factory'), $this->dispatcher);
                 $WebSocketHandler->run();
             }
+            $this->dispatcher->dispatch(Events::SHUTDOWN, new ServerEvent);
         } catch (\Exception $e) {
             $this->dispatcher->dispatch(Events::SHUTDOWN, new ServerEvent);
             throw $e;
         }
-        $this->dispatcher->dispatch(Events::SHUTDOWN, new ServerEvent);
     }
 
     /**
@@ -175,7 +171,7 @@ class Server
         }
     }
 
-    protected function spawnHandlers()
+    private function spawnHandlers()
     {
         $pid      = $master = null;
         $handlers = [];
@@ -204,8 +200,43 @@ class Server
      *
      * @return ApplicationInterface[]
      */
-    protected function getApplications($path)
+    private function getApplications($path)
     {
         return isset($this->applications[$path]) ? $this->applications[$path] : [];
+    }
+
+    /**
+     * @param ContainerBuilder $container
+     */
+    private function containerDefinitions(ContainerBuilder $container)
+    {
+        if (!$container->hasParameter('lexty.websocketserver.handler.class')) {
+            $container->setParameter('lexty.websocketserver.handler.class', 'Lexty\\WebSocketServer\\Handler');
+        }
+
+        if (!$container->hasParameter('lexty.websocketserver.payload.class')) {
+            $container->setParameter('lexty.websocketserver.payload.class', 'Lexty\\WebSocketServer\\Payload\\Payload');
+        }
+        if (!$container->hasParameter('lexty.websocketserver.payload_factory.class')) {
+            $container->setParameter('lexty.websocketserver.payload_factory.class', 'Lexty\\WebSocketServer\\Payload\\PayloadFactory');
+        }
+        if (!$container->has('lexty.websocketserver.payload_factory')) {
+            $container
+                ->register('lexty.websocketserver.payload_factory', $container->getParameter('lexty.websocketserver.payload_factory.class'))
+                ->addArgument('%lexty.websocketserver.payload.class%');
+        }
+
+        if (!$container->hasParameter('lexty.websocketserver.connection.class')) {
+            $container->setParameter('lexty.websocketserver.connection.class', 'Lexty\\WebSocketServer\\Connection\\Connection');
+        }
+        if (!$container->hasParameter('lexty.websocketserver.connection_factory.class')) {
+            $container->setParameter('lexty.websocketserver.connection_factory.class', 'Lexty\\WebSocketServer\\Connection\\ConnectionFactory');
+        }
+        if (!$container->has('lexty.websocketserver.connection_factory')) {
+            $container
+                ->register('lexty.websocketserver.connection_factory', $container->getParameter('lexty.websocketserver.connection_factory.class'))
+                ->addArgument(new Reference('lexty.websocketserver.payload_factory'))
+                ->addArgument('%lexty.websocketserver.connection.class%');
+        }
     }
 }

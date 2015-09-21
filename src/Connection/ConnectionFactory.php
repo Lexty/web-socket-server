@@ -13,14 +13,21 @@ class ConnectionFactory
      * @var PayloadFactoryInterface
      */
     private $payloadFactory;
+    /**
+     * @var string
+     */
+    private $connectionClass;
 
     /**
      * @param PayloadFactoryInterface $payloadFactory
+     * @param string                  $connectionClass
      */
-    public function __construct(PayloadFactoryInterface $payloadFactory)
+    public function __construct(PayloadFactoryInterface $payloadFactory, $connectionClass)
     {
         $this->payloadFactory = $payloadFactory;
+        $this->connectionClass = $connectionClass;
     }
+
     /**
      * @param resource $streamResource
      *
@@ -28,6 +35,6 @@ class ConnectionFactory
      */
     public function create($streamResource)
     {
-        return new Connection($streamResource, $this->payloadFactory);
+        return new $this->connectionClass($streamResource, $this->payloadFactory);
     }
 }

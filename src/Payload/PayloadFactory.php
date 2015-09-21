@@ -8,12 +8,26 @@ namespace Lexty\WebSocketServer\Payload;
 class PayloadFactory implements PayloadFactoryInterface
 {
     /**
+     * @var string
+     */
+    private $payloadClass;
+
+    /**
+     * @param string $payloadClass
+     */
+    public function __construct($payloadClass)
+    {
+        $this->payloadClass = $payloadClass;
+    }
+
+    /**
      * @param string $data
      *
      * @return PayloadInterface
      */
-    public function create($data) {
-        return new Payload((string) $data);
+    public function create($data)
+    {
+        return new $this->payloadClass((string) $data);
     }
 
     /**
@@ -21,7 +35,8 @@ class PayloadFactory implements PayloadFactoryInterface
      *
      * @return string
      */
-    public function encode($data) {
-        return Payload::encode((string) $data);
+    public function encode($data)
+    {
+        return call_user_func([$this->payloadClass, 'encode'], (string) $data);
     }
 }

@@ -5,12 +5,11 @@
 
 namespace Lexty\WebSocketServer;
 
+use Lexty\WebSocketServer\Connection\ConnectionFactory;
 use Lexty\WebSocketServer\Connection\ConnectionInterface;
 use Lexty\WebSocketServer\Events\ConnectionEvent;
 use Lexty\WebSocketServer\Events\ErrorEvent;
 use Lexty\WebSocketServer\Events\MessageEvent;
-use Lexty\WebSocketServer\Payload\PayloadInterface;
-use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class Handler implements HandlerInterface
@@ -18,9 +17,9 @@ class Handler implements HandlerInterface
     use ReadonlyPropertiesAccessTrait;
 
     /**
-     * @var ContainerInterface
+     * @var ConnectionFactory
      */
-    private $container;
+    private $connectionFactory;
     /**
      * @var EventDispatcherInterface
      */
@@ -53,26 +52,18 @@ class Handler implements HandlerInterface
      * @var int
      */
     protected $maxConnectionsByIp = 0;
-    /**
-     * @var string
-     */
-    protected $connectionClass;
-    /**
-     * @var string
-     */
-    protected $payloadClass;
 
     /**
      * @param resource                 $server
-     * @param ContainerInterface       $container
+     * @param ConnectionFactory        $connectionFactory
      * @param EventDispatcherInterface $dispatcher
      */
-    public function __construct($server, ContainerInterface $container, EventDispatcherInterface $dispatcher)
+    public function __construct($server, ConnectionFactory $connectionFactory, EventDispatcherInterface $dispatcher)
     {
-        $this->server       = $server;
-        $this->container    = $container;
-        $this->dispatcher   = $dispatcher;
-        $this->pid          = posix_getpid();
+        $this->server            = $server;
+        $this->connectionFactory = $connectionFactory;
+        $this->dispatcher        = $dispatcher;
+        $this->pid               = posix_getpid();
     }
 
     /**
@@ -91,6 +82,17 @@ class Handler implements HandlerInterface
         return count($this->clients);
     }
 
+    /**
+     * {@inheritdoc}
+     */
+    public function getDispatcher()
+    {
+        return $this->dispatcher;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function run()
     {
         static $isRunning;
@@ -140,17 +142,14 @@ class Handler implements HandlerInterface
 
                                 if (!strlen($data)) { // connection has been closed
                                     $conn->close();
-//                                    $this->fireClose($conn);
                                     $this->removeConnection($conn);
                                     $this->dispatcher->dispatch(Events::DISCONNECT, new ConnectionEvent($conn, $this));
                                     $this->dispatcher->dispatch(Events::CLOSE, new ConnectionEvent($conn, $this));
                                     continue;
                                 }
 
-//                                $this->fireMessage($conn, $data);
                                 $this->dispatcher->dispatch(Events::MESSAGE, new MessageEvent($conn, $data, $this));
                             } catch (\Exception $e) {
-//                                $this->fireError($conn, $e);
                                 $this->dispatcher->dispatch(Events::ERROR, new ErrorEvent($conn, $e, $this));
                             }
                         } catch (\Exception $exception) {
@@ -173,10 +172,8 @@ class Handler implements HandlerInterface
                                 $this->dispatcher->dispatch(Events::HANDSHAKE_SEND, new ConnectionEvent($conn, $this));
                             }
 
-//                            $this->fireOpen($conn);
                             $this->dispatcher->dispatch(Events::OPEN, new ConnectionEvent($conn, $this));
                         } catch (\Exception $e) {
-//                            $this->fireError($conn, $e);
                             $this->dispatcher->dispatch(Events::ERROR, new ErrorEvent($conn, $e, $this));
                         }
                     } catch (\Exception $exception) {
@@ -194,7 +191,7 @@ class Handler implements HandlerInterface
      */
     protected function createConnection($client)
     {
-        return $this->container->get('connection_factory')->create($client);
+        return $this->connectionFactory->create($client);
     }
 
     /**
@@ -236,7 +233,8 @@ class Handler implements HandlerInterface
     /**
      * @param \Exception $e
      */
-    protected function exceptionHandler(\Exception $e) {
+    protected function exceptionHandler(\Exception $e)
+    {
         printf("Uncaught exception '%s' with message '%s in %s:%d\n", get_class($e), $e->getMessage(), $e->getFile(), $e->getLine());
         printf("Stack trace:\n");
         printf("%s\n", $e->getTraceAsString());
