@@ -107,7 +107,7 @@ class App extends BaseApplication
 
 ### Override library classes
 
-For using your own implementation of classes `Connection` or `Payload` you should override his names in DI container.
+For using your own implementation of classes `Connection` or `Payload` you should override they names in DI container.
 
 ```php
 <?php
