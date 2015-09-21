@@ -2,6 +2,14 @@
 
 A WebSocket implementation for PHP. Supports [RFC6455](https://tools.ietf.org/html/rfc6455).
 
+### Requirements
+
+ * php 5.4 or higher
+ * [pcntl](http://php.net/manual/en/book.pcntl.php)
+ * [sockets](http://php.net/manual/en/book.sockets.php)
+ * [symfony/EventDispatcher](https://github.com/symfony/EventDispatcher)
+ * [symfony/DependencyInjection](https://github.com/symfony/DependencyInjection)
+
 ### Installation
 
 Using Composer:
@@ -95,4 +103,24 @@ class App extends BaseApplication
         }
     }
 }
+```
+
+### Override library classes
+
+For using your own implementation of classes `Connection` or `Payload` you should override his names in DI container.
+
+```php
+<?php
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Lexty\WebSocketServer\Applications\Chat;
+
+$container = new ContainerBuilder;
+// MyConnectionClass must implements ConnectionInterface
+$container->setParameter('lexty.websocketserver.payload.class', 'MyConnectionClass');
+// MyPayloadClass must implements PayloadInterface
+$container->setParameter('lexty.websocketserver.connection.class', 'MyPayloadClass');
+
+$server = new Server('localhost', 8080, '/tmp/websocketserver.pid', 1, $container)
+    ->registerApplication('/chat', new Chat)
+    ->run();
 ```
