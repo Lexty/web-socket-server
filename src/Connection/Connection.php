@@ -63,7 +63,7 @@ class Connection implements ConnectionInterface
      */
     public function send($data, $encode = true)
     {
-        $data = $encode ? $this->payloadFactory->encode($data) : (string) $data;
+        $data = $encode ? $this->payloadFactory->encode($data) : $data;
 
         $status = false;
         $write  = [$this->connection];

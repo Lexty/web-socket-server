@@ -27,7 +27,7 @@ class PayloadFactory implements PayloadFactoryInterface
      */
     public function create($data)
     {
-        return new $this->payloadClass((string) $data);
+        return new $this->payloadClass($data);
     }
 
     /**
@@ -37,6 +37,6 @@ class PayloadFactory implements PayloadFactoryInterface
      */
     public function encode($data)
     {
-        return call_user_func([$this->payloadClass, 'encode'], (string) $data);
+        return call_user_func([$this->payloadClass, 'encode'], $data);
     }
 }

@@ -121,42 +121,7 @@ class Handler implements HandlerInterface
             $this->readServerSocket($read);          // connect to it and make handshake, according to the WebSocket protocol
         }
 
-        if ($read) { // Data came from existing connections
-            $this->readSockets($read);
-        }
-
-        if ($write) {
-            $this->writeSockets($write);
-        }
-    }
-
-    /**
-     * @param array $read
-     */
-    protected function readServerSocket(&$read)
-    {
-        if ($client = stream_socket_accept($this->server, -1)) {
-            $conn = $this->createConnection($client);
-            if ($this->maxConnectionsByIp
-                && isset($this->ips[$conn->remoteAddress])
-                && $this->ips[$conn->remoteAddress] > $this->maxConnectionsByIp
-            ) {
-                $conn->close();
-            } else {
-                $this->addConnection($conn);
-                $this->dispatcher->dispatch(Events::CONNECT, new ConnectionEvent($conn, $this));
-            }
-        }
-
-        unset($read[array_search($this->server, $read)]);
-    }
-
-    /**
-     * @param array $read
-     */
-    protected function readSockets(&$read)
-    {
-        foreach ($read as $client) {
+        foreach ($read as $client) { // Data came from existing connections
             $conn = $this->getConnection($client);
             if ($conn && !$conn->handshake && !$conn->request) {
                 if ($conn->doHandshake()) {
@@ -189,13 +154,7 @@ class Handler implements HandlerInterface
                 }
             }
         }
-    }
 
-    /**
-     * @param array $write
-     */
-    protected function writeSockets(&$write)
-    {
         foreach ($write as $client) {
             $conn = $this->getConnection($client);
             try {
@@ -216,6 +175,40 @@ class Handler implements HandlerInterface
                 $this->handleException($e);
             }
         }
+    }
+
+    /**
+     * @param array $read
+     */
+    protected function readServerSocket(&$read)
+    {
+        if ($client = stream_socket_accept($this->server, -1)) {
+            $conn = $this->createConnection($client);
+            if ($this->maxConnectionsByIp
+                && isset($this->ips[$conn->remoteAddress])
+                && $this->ips[$conn->remoteAddress] > $this->maxConnectionsByIp
+            ) {
+                $conn->close();
+            } else {
+                $this->addConnection($conn);
+                $this->dispatcher->dispatch(Events::CONNECT, new ConnectionEvent($conn, $this));
+            }
+        }
+
+        unset($read[array_search($this->server, $read)]);
+    }
+
+    protected function readSockets($conn)
+    {
+
+    }
+
+    /**
+     * @param array $write
+     */
+    protected function writeSockets(&$write)
+    {
+
     }
 
     /**
