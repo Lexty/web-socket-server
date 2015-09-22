@@ -18,10 +18,20 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 /**
  * @link https://tools.ietf.org/html/rfc6455 RFC6455
+ *
+ * @property ContainerInterface       $container
+ * @property EventDispatcherInterface $dispatcher
+ * @property string                   $host
+ * @property int                      $port
+ * @property int                      $handlersCount
+ * @property int                      $pid
+ * @property ApplicationInterface[][] $applications
  */
 class Server
 {
-    const POWERED_BY = 'Lexty-WebSocketServer/0.1.1';
+    use ReadonlyPropertiesAccessTrait;
+
+    const POWERED_BY = 'Lexty-WebSocketServer/0.1.2';
 
     /**
      * @var ContainerInterface
@@ -40,13 +50,13 @@ class Server
      */
     private $port;
     /**
-     * @var string
+     * @var int
      */
-    private $pidFile;
+    private $pid;
     /**
      * @var int
      */
-    private $handlers;
+    private $handlersCount;
     /**
      * @var ApplicationInterface[][]
      */
@@ -56,7 +66,7 @@ class Server
      * @param string                        $host
      * @param int                           $port
      * @param string                        $pidFile
-     * @param int                           $handlers
+     * @param int                           $handlersCount
      * @param ContainerBuilder|null         $container
      * @param EventDispatcherInterface|null $dispatcher
      */
@@ -64,7 +74,7 @@ class Server
         $host = 'localhost',
         $port = 8080,
         $pidFile = '/tmp/web-socket-server.pid',
-        $handlers = 1,
+        $handlersCount = 1,
         ContainerBuilder $container = null,
         EventDispatcherInterface $dispatcher = null
     ) {
@@ -76,10 +86,10 @@ class Server
         if (false !== strpos($host, ':')) {
             $host = '[' . $host . ']';
         }
-        $this->host     = $host;
-        $this->port     = $port;
-        $this->pidFile  = $pidFile;
-        $this->handlers = $handlers;
+        $this->host          = $host;
+        $this->port          = $port;
+        $this->pidFile       = $pidFile;
+        $this->handlersCount = $handlersCount;
 
         $this->dispatcher->addListener(Events::OPEN, [$this, 'onOpen'], 10);
         $this->dispatcher->addListener(Events::CLOSE, [$this, 'onClose'], 10);
@@ -99,28 +109,29 @@ class Server
         return $this;
     }
 
+    /**
+     * Start server
+     *
+     * @throws \Exception
+     */
     public function run()
     {
         try {
             // open server socket
-            $server = stream_socket_server("tcp://{$this->host}:{$this->port}", $errno, $errstr);
+            $server = $this->createSocketServer($this->host, $this->port);
 
-            if (false === $server) {
-                throw new ConnectionException(sprintf('Could not bind to tcp://%s:%s: %s', $this->host, $this->port, $errstr), $errno);
-            }
-
-            list($pid, $master, $handlers) = $this->spawnHandlers(); // create a child process
+            list($pid, $master, $handlers) = $this->spawnHandlers($this->handlersCount); // create a child process
 
             $handlerClass = $this->container->getParameter('lexty.websocketserver.handler.class');
 
             if ($pid) { // master
                 fclose($server);                          // master will not process incoming connections on the main socket
-                $WebSocketMaster = new Master($handlers); // he will forward messages between worker`s
-                $WebSocketMaster->run();
+                $webSocketMaster = new Master($handlers); // he will forward messages between worker`s
+                $webSocketMaster->run();
             } else { // worker
-                /** @var HandlerInterface $WebSocketHandler */
-                $WebSocketHandler = new $handlerClass($server, $this->container->get('lexty.websocketserver.connection_factory'), $this->dispatcher);
-                $WebSocketHandler->run();
+                /** @var HandlerInterface $webSocketHandler */
+                $webSocketHandler = new $handlerClass($server, $this->container->get('lexty.websocketserver.connection_factory'), $this->dispatcher);
+                $webSocketHandler->run();
             }
             $this->dispatcher->dispatch(Events::SHUTDOWN, new ServerEvent);
         } catch (\Exception $e) {
@@ -171,11 +182,30 @@ class Server
         }
     }
 
-    private function spawnHandlers()
+    /**
+     * @param string $host
+     * @param int    $port
+     *
+     * @return resource
+     */
+    private function createSocketServer($host, $port) {
+        $server = stream_socket_server("tcp://$host:$port", $errno, $errstr);
+        if (false === $server) {
+            throw new ConnectionException(sprintf('Could not bind to tcp://%s:%s: %s', $host, $port, $errstr), $errno);
+        }
+        return $server;
+    }
+
+    /**
+     * @param int $count
+     *
+     * @return array
+     */
+    private function spawnHandlers($count)
     {
-        $pid      = $master = null;
+        $pid = $master = null;
         $handlers = [];
-        for ($i = 0; $i < $this->handlers; $i++) {
+        for ($i = 0; $i < $count; $i++) {
             // creating twin sockets, they will be contacted by the master and the worker is
             $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
 
@@ -193,16 +223,6 @@ class Server
         }
 
         return [$pid, $master, $handlers];
-    }
-
-    /**
-     * @param string $path
-     *
-     * @return ApplicationInterface[]
-     */
-    private function getApplications($path)
-    {
-        return isset($this->applications[$path]) ? $this->applications[$path] : [];
     }
 
     /**
@@ -238,5 +258,63 @@ class Server
                 ->addArgument(new Reference('lexty.websocketserver.payload_factory'))
                 ->addArgument('%lexty.websocketserver.connection.class%');
         }
+    }
+
+    /**
+     * @return ContainerInterface
+     */
+    public function getContainer()
+    {
+        return $this->container;
+    }
+
+    /**
+     * @return EventDispatcherInterface
+     */
+    public function getDispatcher()
+    {
+        return $this->dispatcher;
+    }
+
+    /**
+     * @return string
+     */
+    public function getHost()
+    {
+        return $this->host;
+    }
+
+    /**
+     * @return int
+     */
+    public function getPort()
+    {
+        return $this->port;
+    }
+
+    /**
+     * @return int
+     */
+    public function getPid()
+    {
+        return $this->pid;
+    }
+
+    /**
+     * @return int
+     */
+    public function getHandlersCount()
+    {
+        return $this->handlersCount;
+    }
+
+    /**
+     * @param string|null $path
+     *
+     * @return ApplicationInterface[][][]|ApplicationInterface[]
+     */
+    private function getApplications($path = null)
+    {
+        return null === $path ? $this->applications : (isset($this->applications[$path]) ? $this->applications[$path] : []);
     }
 }

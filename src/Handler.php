@@ -102,84 +102,118 @@ class Handler implements HandlerInterface
             // We are preparing an array of sockets that need to be processed
             $read = $this->clients;
             $read[] = $this->server;
+            $write = $except = [];
 
-            stream_select($read, $write, $except, null); // update an array of sockets that can be processed
+            $this->handle($read, $write, $except);
+        }
+    }
 
-            if (in_array($this->server, $read)) {        // on the server socket came a request from a new connection
-                                                         // connect to it and make handshake, according to the WebSocket protocol
-                if ($client = stream_socket_accept($this->server, -1)) {
-                    $conn = $this->createConnection($client);
-                    if ($this->maxConnectionsByIp
-                        && isset($this->ips[$conn->remoteAddress])
-                        && $this->ips[$conn->remoteAddress] > $this->maxConnectionsByIp
-                    ) {
-                        $conn->close();
-                    } else {
-                        $this->addConnection($conn);
-                        $this->dispatcher->dispatch(Events::CONNECT, new ConnectionEvent($conn, $this));
-                    }
-                }
+    /**
+     * @param array $read
+     * @param array $write
+     * @param array $except
+     */
+    protected function handle(&$read, &$write, &$except)
+    {
+        stream_select($read, $write, $except, null); // update an array of sockets that can be processed
 
-                unset($read[array_search($this->server, $read)]);
+        if (in_array($this->server, $read)) {        // on the server socket came a request from a new connection
+            $this->readServerSocket($read);          // connect to it and make handshake, according to the WebSocket protocol
+        }
+
+        if ($read) { // Data came from existing connections
+            $this->readSockets($read);
+        }
+
+        if ($write) {
+            $this->writeSockets($write);
+        }
+    }
+
+    /**
+     * @param array $read
+     */
+    protected function readServerSocket(&$read)
+    {
+        if ($client = stream_socket_accept($this->server, -1)) {
+            $conn = $this->createConnection($client);
+            if ($this->maxConnectionsByIp
+                && isset($this->ips[$conn->remoteAddress])
+                && $this->ips[$conn->remoteAddress] > $this->maxConnectionsByIp
+            ) {
+                $conn->close();
+            } else {
+                $this->addConnection($conn);
+                $this->dispatcher->dispatch(Events::CONNECT, new ConnectionEvent($conn, $this));
             }
+        }
 
-            if ($read) { // Data came from existing connections
-                foreach ($read as $client) {
-                    $conn = $this->getConnection($client);
-                    if ($conn && !$conn->handshake && !$conn->request) {
-                        if ($conn->doHandshake()) {
-                            $write[$conn->id] = $conn->resource;
-                            $this->dispatcher->dispatch(Events::HANDSHAKE_READ, new ConnectionEvent($conn, $this));
-                        } else {
-                            $this->removeConnection($conn);
-                            $conn->close();
-                            $this->dispatcher->dispatch(Events::DISCONNECT, new ConnectionEvent($conn, $this));
-                        }
-                    } else if ($conn && $conn->handshake) {
-                        try {
-                            try {
-                                $data = $conn->read();
+        unset($read[array_search($this->server, $read)]);
+    }
 
-                                if (!strlen($data)) { // connection has been closed
-                                    $conn->close();
-                                    $this->removeConnection($conn);
-                                    $this->dispatcher->dispatch(Events::DISCONNECT, new ConnectionEvent($conn, $this));
-                                    $this->dispatcher->dispatch(Events::CLOSE, new ConnectionEvent($conn, $this));
-                                    continue;
-                                }
-
-                                $this->dispatcher->dispatch(Events::MESSAGE, new MessageEvent($conn, $data, $this));
-                            } catch (\Exception $e) {
-                                $this->dispatcher->dispatch(Events::ERROR, new ErrorEvent($conn, $e, $this));
-                            }
-                        } catch (\Exception $exception) {
-                            $this->exceptionHandler($exception);
-                        }
-                    }
+    /**
+     * @param array $read
+     */
+    protected function readSockets(&$read)
+    {
+        foreach ($read as $client) {
+            $conn = $this->getConnection($client);
+            if ($conn && !$conn->handshake && !$conn->request) {
+                if ($conn->doHandshake()) {
+                    $write[$conn->id] = $conn->resource;
+                    $this->dispatcher->dispatch(Events::HANDSHAKE_READ, new ConnectionEvent($conn, $this));
+                } else {
+                    $this->removeConnection($conn);
+                    $conn->close();
+                    $this->dispatcher->dispatch(Events::DISCONNECT, new ConnectionEvent($conn, $this));
                 }
-            }
-
-            if ($write) {
-                foreach ($write as $client) {
-                    $conn = $this->getConnection($client);
+            } else if ($conn && $conn->handshake) {
+                try {
                     try {
-                        try {
-                            if (!$conn->request) { // if handshake has not been received
-                                continue;          // then answer a handshake still early
-                            }
-                            if ($conn->doHandshake()) {
-                                unset($write[$conn->id]);
-                                $this->dispatcher->dispatch(Events::HANDSHAKE_SEND, new ConnectionEvent($conn, $this));
-                            }
+                        $data = $conn->read();
 
-                            $this->dispatcher->dispatch(Events::OPEN, new ConnectionEvent($conn, $this));
-                        } catch (\Exception $e) {
-                            $this->dispatcher->dispatch(Events::ERROR, new ErrorEvent($conn, $e, $this));
+                        if (!strlen($data)) { // connection has been closed
+                            $conn->close();
+                            $this->removeConnection($conn);
+                            $this->dispatcher->dispatch(Events::DISCONNECT, new ConnectionEvent($conn, $this));
+                            $this->dispatcher->dispatch(Events::CLOSE, new ConnectionEvent($conn, $this));
+                            continue;
                         }
-                    } catch (\Exception $exception) {
-                        $this->exceptionHandler($exception);
+
+                        $this->dispatcher->dispatch(Events::MESSAGE, new MessageEvent($conn, $data, $this));
+                    } catch (\Exception $e) {
+                        $this->dispatcher->dispatch(Events::ERROR, new ErrorEvent($conn, $e, $this));
                     }
+                } catch (\Exception $e) {
+                    $this->handleException($e);
                 }
+            }
+        }
+    }
+
+    /**
+     * @param array $write
+     */
+    protected function writeSockets(&$write)
+    {
+        foreach ($write as $client) {
+            $conn = $this->getConnection($client);
+            try {
+                try {
+                    if (!$conn->request) { // if handshake has not been received
+                        continue;          // then answer a handshake still early
+                    }
+                    if ($conn->doHandshake()) {
+                        unset($write[$conn->id]);
+                        $this->dispatcher->dispatch(Events::HANDSHAKE_SEND, new ConnectionEvent($conn, $this));
+                    }
+
+                    $this->dispatcher->dispatch(Events::OPEN, new ConnectionEvent($conn, $this));
+                } catch (\Exception $e) {
+                    $this->dispatcher->dispatch(Events::ERROR, new ErrorEvent($conn, $e, $this));
+                }
+            } catch (\Exception $e) {
+                $this->handleException($e);
             }
         }
     }
@@ -233,7 +267,7 @@ class Handler implements HandlerInterface
     /**
      * @param \Exception $e
      */
-    protected function exceptionHandler(\Exception $e)
+    protected function handleException(\Exception $e)
     {
         printf("Uncaught exception '%s' with message '%s in %s:%d\n", get_class($e), $e->getMessage(), $e->getFile(), $e->getLine());
         printf("Stack trace:\n");
